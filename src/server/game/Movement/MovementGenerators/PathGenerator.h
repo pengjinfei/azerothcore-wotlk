@@ -33,11 +33,11 @@ class WorldObject;
 // this is way more than actual evade range
 // I think we can safely cut those down even more
 #ifdef MOD_PLAYERBOTS
-// Bots travel long-distance to quests; the default 74-poly cap forces
-// repeated re-pathfinding mid-route and produces partial paths short of
-// the destination. 148 covers most quest movements end-to-end.
-#define MAX_PATH_LENGTH         148
-#define MAX_POINT_PATH_LENGTH   148
+// Bots travel long-distance to quests and through large indoor components;
+// 148 truncates verified Utgarde Keep routes even after the Detour query
+// finishes successfully. 512 keeps those normal-ground routes intact.
+#define MAX_PATH_LENGTH         512
+#define MAX_POINT_PATH_LENGTH   512
 #else
 #define MAX_PATH_LENGTH         74
 #define MAX_POINT_PATH_LENGTH   74
@@ -48,6 +48,39 @@ class WorldObject;
 #define DISALLOW_TIME_AFTER_FAIL    3 // secs
 #define VERTEX_SIZE       3
 #define INVALID_POLYREF   0
+
+// Raw Detour results for an explicitly requested route diagnosis. This is
+// intentionally separate from PathType: PATHFIND_NOT_USING_PATH conflates
+// unavailable tiles, failed endpoint projection, and Player fallback paths.
+struct PathProjectionDiagnostics
+{
+    dtPolyRef polyRef{INVALID_POLYREF};
+    G3D::Vector3 closestPoint{G3D::Vector3::zero()};
+    float distance{0.0f};
+    uint32 initialQueryStatus{0};
+    uint32 expandedQueryStatus{0};
+    bool usedExpandedQuery{false};
+};
+
+struct PathRouteDiagnostics
+{
+    bool navMeshAvailable{false};
+    bool navMeshQueryAvailable{false};
+    bool startTileLoaded{false};
+    bool endTileLoaded{false};
+    int32 startTileX{-1};
+    int32 startTileY{-1};
+    int32 endTileX{-1};
+    int32 endTileY{-1};
+    PathProjectionDiagnostics start;
+    PathProjectionDiagnostics end;
+    uint32 findPathStatus{0};
+    uint32 pathPolyCount{0};
+    dtPolyRef pathLastPoly{INVALID_POLYREF};
+    bool endReachable{false};
+    bool connectivitySearchCapped{false};
+    uint32 reachablePolyCount{0};
+};
 
 enum PathType
 {
@@ -108,6 +141,11 @@ class PathGenerator
         [[nodiscard]] Movement::PointsArray const& GetPath() const { return _pathPoints; }
 
         [[nodiscard]] PathType GetPathType() const { return _type; }
+
+        // Re-runs only Detour queries against the current start/end positions.
+        // Call after CalculatePath when a caller needs to distinguish an mmap
+        // asset/topology problem from a query-resource or projection failure.
+        [[nodiscard]] PathRouteDiagnostics GetRouteDiagnostics() const;
 
         // shortens the path until the destination is the specified distance from the target point
         void ShortenPathUntilDist(G3D::Vector3 const& point, float dist);

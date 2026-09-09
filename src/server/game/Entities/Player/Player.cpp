@@ -59,6 +59,7 @@
 #include "LootItemStorage.h"
 #include "MapMgr.h"
 #include "MiscPackets.h"
+#include "MotionMaster.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "OutdoorPvP.h"

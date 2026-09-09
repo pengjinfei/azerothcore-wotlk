@@ -127,7 +127,11 @@ namespace MMAP
         dtNavMeshQuery* query = dtAllocNavMeshQuery();
         ASSERT(query);
 
-        if (dtStatusFailed(query->init(navMesh, 1024)))
+        // 1,024 nodes exhausts on valid long routes through complex indoor
+        // meshes (for example, the 4,562-poly Utgarde Keep component).  This
+        // query is allocated once per active map instance, not per path.
+        constexpr int kNavMeshQueryMaxNodes = 4096;
+        if (dtStatusFailed(query->init(navMesh, kNavMeshQueryMaxNodes)))
         {
             dtFreeNavMeshQuery(query);
             return nullptr;

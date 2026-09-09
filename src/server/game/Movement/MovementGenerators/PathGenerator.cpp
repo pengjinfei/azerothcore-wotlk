@@ -28,6 +28,9 @@
 #include "WorldSession.h"
 #endif
 
+#include <unordered_set>
+#include <vector>
+
 // Blades Edge Arena Ropes normalization
 namespace
 {
@@ -186,6 +189,121 @@ bool PathGenerator::CalculatePath(float x, float y, float z, float destX, float 
 
     BuildPolyPath(start, dest);
     return true;
+}
+
+PathRouteDiagnostics PathGenerator::GetRouteDiagnostics() const
+{
+    PathRouteDiagnostics diagnostics;
+    diagnostics.navMeshAvailable = _navMesh != nullptr;
+    diagnostics.navMeshQueryAvailable = _navMeshQuery != nullptr;
+    if (!_navMesh || !_navMeshQuery)
+        return diagnostics;
+
+    auto inspectTile = [this](G3D::Vector3 const& position, int32& tileX, int32& tileY)
+    {
+        float point[VERTEX_SIZE] = { position.y, position.z, position.x };
+        _navMesh->calcTileLoc(point, &tileX, &tileY);
+        return tileX >= 0 && tileY >= 0 && _navMesh->getTileAt(tileX, tileY, 0) != nullptr;
+    };
+    diagnostics.startTileLoaded = inspectTile(_startPosition, diagnostics.startTileX, diagnostics.startTileY);
+    diagnostics.endTileLoaded = inspectTile(_endPosition, diagnostics.endTileX, diagnostics.endTileY);
+
+    auto inspectProjection = [this](G3D::Vector3 const& position, PathProjectionDiagnostics& projection)
+    {
+        float point[VERTEX_SIZE] = { position.y, position.z, position.x };
+        float closestPoint[VERTEX_SIZE] = { 0.0f, 0.0f, 0.0f };
+        float extents[VERTEX_SIZE] = { 3.0f, 5.0f, 3.0f };
+        projection.initialQueryStatus = _navMeshQuery->findNearestPoly(point, extents, &_filter,
+            &projection.polyRef, closestPoint);
+        if (dtStatusSucceed(projection.initialQueryStatus) && projection.polyRef != INVALID_POLYREF)
+        {
+            projection.closestPoint = { closestPoint[2], closestPoint[0], closestPoint[1] };
+            projection.distance = dtVdist(point, closestPoint);
+            return;
+        }
+
+        projection.usedExpandedQuery = true;
+        projection.polyRef = INVALID_POLYREF;
+        extents[1] = 50.0f;
+        projection.expandedQueryStatus = _navMeshQuery->findNearestPoly(point, extents, &_filter,
+            &projection.polyRef, closestPoint);
+        if (dtStatusSucceed(projection.expandedQueryStatus) && projection.polyRef != INVALID_POLYREF)
+        {
+            projection.closestPoint = { closestPoint[2], closestPoint[0], closestPoint[1] };
+            projection.distance = dtVdist(point, closestPoint);
+            return;
+        }
+
+        // Preserve the failed endpoint projection, but make the nearest
+        // walkable upper-floor geometry visible to a diagnostic caller.  This
+        // result is never used to build or permit a route.
+        dtPolyRef nearbyPolyRef = INVALID_POLYREF;
+        float nearbyExtents[VERTEX_SIZE] = { 50.0f, 50.0f, 50.0f };
+        if (dtStatusSucceed(_navMeshQuery->findNearestPoly(point, nearbyExtents, &_filter, &nearbyPolyRef,
+                closestPoint)) && nearbyPolyRef != INVALID_POLYREF)
+        {
+            projection.closestPoint = { closestPoint[2], closestPoint[0], closestPoint[1] };
+            projection.distance = dtVdist(point, closestPoint);
+        }
+    };
+    inspectProjection(_startPosition, diagnostics.start);
+    inspectProjection(_endPosition, diagnostics.end);
+    if (diagnostics.start.polyRef == INVALID_POLYREF || diagnostics.end.polyRef == INVALID_POLYREF)
+        return diagnostics;
+
+    float startPoint[VERTEX_SIZE] = { _startPosition.y, _startPosition.z, _startPosition.x };
+    float endPoint[VERTEX_SIZE] = { _endPosition.y, _endPosition.z, _endPosition.x };
+    dtPolyRef path[MAX_PATH_LENGTH];
+    int pathLength = 0;
+    diagnostics.findPathStatus = _navMeshQuery->findPath(diagnostics.start.polyRef, diagnostics.end.polyRef,
+        startPoint, endPoint, &_filter, path, &pathLength, MAX_PATH_LENGTH);
+    diagnostics.pathPolyCount = pathLength > 0 ? uint32(pathLength) : 0;
+    if (pathLength > 0)
+        diagnostics.pathLastPoly = path[pathLength - 1];
+
+    // This follows Detour links, not spatial proximity. It deliberately uses
+    // the same filter as findPath so it distinguishes a real graph split from
+    // the query's node/output limits.
+    constexpr size_t kMaxConnectivityPolys = 200000;
+    std::vector<dtPolyRef> pending{diagnostics.start.polyRef};
+    std::unordered_set<dtPolyRef> visited{diagnostics.start.polyRef};
+    for (size_t index = 0; index < pending.size(); ++index)
+    {
+        dtPolyRef const current = pending[index];
+        if (current == diagnostics.end.polyRef)
+        {
+            diagnostics.endReachable = true;
+            break;
+        }
+        if (visited.size() >= kMaxConnectivityPolys)
+        {
+            diagnostics.connectivitySearchCapped = true;
+            break;
+        }
+
+        dtMeshTile const* tile = nullptr;
+        dtPoly const* poly = nullptr;
+        if (dtStatusFailed(_navMesh->getTileAndPolyByRef(current, &tile, &poly)) || !tile || !poly)
+            continue;
+
+        for (uint32 linkIndex = poly->firstLink; linkIndex != DT_NULL_LINK; linkIndex = tile->links[linkIndex].next)
+        {
+            dtPolyRef const next = tile->links[linkIndex].ref;
+            if (next == INVALID_POLYREF)
+                continue;
+
+            dtMeshTile const* nextTile = nullptr;
+            dtPoly const* nextPoly = nullptr;
+            if (dtStatusFailed(_navMesh->getTileAndPolyByRef(next, &nextTile, &nextPoly)) || !nextTile || !nextPoly ||
+                !_filter.passFilter(next, nextTile, nextPoly))
+                continue;
+
+            if (visited.insert(next).second)
+                pending.push_back(next);
+        }
+    }
+    diagnostics.reachablePolyCount = visited.size();
+    return diagnostics;
 }
 
 dtPolyRef PathGenerator::GetPathPolyByPosition(dtPolyRef const* polyPath, uint32 polyPathSize, float const* point, float* distance) const
