@@ -48,6 +48,7 @@ enum Npcs
     NPC_HORDE_COMMANDER             = 27947,
     NPC_HORDE_CLERIC                = 26803,
 
+    NPC_KERISTRASZA                 = 26723,
     NPC_COMMANDER_STOUTBEARD        = 26796,
     NPC_COMMANDER_KOLURG            = 26798,
     NPC_CRYSTALLINE_FRAYER          = 26793,

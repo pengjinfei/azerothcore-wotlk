@@ -16,6 +16,7 @@
  */
 
 #include "CreatureScript.h"
+#include "GameObjectScript.h"
 #include "InstanceMapScript.h"
 #include "ScriptedCreature.h"
 #include "TaskScheduler.h"
@@ -314,8 +315,44 @@ struct npc_crystalline_frayer : public ScriptedAI
     }
 };
 
+// Telestra's / Anomalus' / Ormorok's Containment Sphere (188526 / 188527 / 188528).
+//
+// Killing the matching boss only clears GO_FLAG_NOT_SELECTABLE on its sphere (see
+// SetBossState below); using the sphere is what is supposed to mark the orb done, and
+// Keristrasza stays in her Frozen Prison until all three orbs are DONE
+// (boss_keristrasza::CanRemovePrison). That last step was missing: instance_nexus::SetData
+// already handles the three sphere entries, but nothing ever called it - GameObject::Use
+// does not notify the instance script, the spheres carry no ScriptName, and their goober
+// eventId is 0, so no event_scripts path existed either. The result was that Keristrasza
+// could never be freed, no matter how many bosses died.
+class go_nexus_containment_sphere : public GameObjectScript
+{
+public:
+    go_nexus_containment_sphere() : GameObjectScript("go_nexus_containment_sphere") { }
+
+    bool OnGossipHello(Player* /*player*/, GameObject* go) override
+    {
+        InstanceScript* instance = go->GetInstanceScript();
+        if (!instance)
+            return false;
+
+        // GameObject::Use already refuses spheres that still carry GO_FLAG_NOT_SELECTABLE,
+        // i.e. those whose boss is still alive, so no extra gating is needed here.
+        instance->SetData(go->GetEntry(), 0);
+
+        // CanRemovePrison() is evaluated inside Keristrasza's AI, which has to be told to
+        // re-check; the instance script does not keep her GUID, so look her up nearby
+        // (all three spheres sit 28-29 yards from her).
+        if (Creature* keristrasza = go->FindNearestCreature(NPC_KERISTRASZA, 100.0f))
+            keristrasza->AI()->SetData(NPC_KERISTRASZA, 0);
+
+        return true;
+    }
+};
+
 void AddSC_instance_nexus()
 {
     new instance_nexus();
+    new go_nexus_containment_sphere();
     RegisterNexusCreatureAI(npc_crystalline_frayer);
 }
