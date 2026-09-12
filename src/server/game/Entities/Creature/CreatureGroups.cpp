@@ -25,6 +25,8 @@
 #include "Timer.h"
 #include "WaypointMgr.h"
 
+#include <vector>
+
 FormationMgr::~FormationMgr()
 {
 }
@@ -395,20 +397,47 @@ void CreatureGroup::RemoveFormationMovement()
 
 void CreatureGroup::DespawnFormation(Milliseconds timeToDespawn /*=0ms*/, Seconds forcedRespawnTimer /*=0s*/)
 {
+    // Snapshot the members before touching any of them: with no despawn delay
+    // DespawnOrUnsummon tears the creature out of the world synchronously
+    // (ForcedDespawn -> RemoveCorpse -> Map::AddObjectToRemoveList ->
+    //  WorldObject::CleanupsBeforeDelete -> Creature::RemoveFromWorld ->
+    //  FormationMgr::RemoveCreatureFromGroup), which erases that member from
+    // m_members - and deletes this group once the last member is gone.
+    // Iterating m_members directly walks freed nodes and crashes; the snapshot
+    // stays valid because the creatures themselves are only destroyed later,
+    // in Map::RemoveAllObjectsInRemoveList.
+    std::vector<Creature*> members;
+    members.reserve(m_members.size());
     for (auto const& itr : m_members)
     {
         if (itr.first)
-            itr.first->DespawnOrUnsummon(timeToDespawn, forcedRespawnTimer);
+            members.push_back(itr.first);
+    }
+
+    for (Creature* member : members)
+    {
+        member->DespawnOrUnsummon(timeToDespawn, forcedRespawnTimer);
     }
 }
 
 void CreatureGroup::RespawnFormation(bool force)
 {
+    // Same hazard as DespawnFormation: Creature::Respawn can remove the creature
+    // from the world (and therefore from m_members) before it is put back, so the
+    // member list must be snapshotted before any of them is touched.
+    std::vector<Creature*> members;
+    members.reserve(m_members.size());
     for (auto const& itr : m_members)
     {
-        if (itr.first && !itr.first->IsAlive())
+        if (itr.first)
+            members.push_back(itr.first);
+    }
+
+    for (Creature* member : members)
+    {
+        if (!member->IsAlive())
         {
-            itr.first->Respawn(force);
+            member->Respawn(force);
         }
     }
 }
