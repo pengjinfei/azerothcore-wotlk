@@ -324,12 +324,11 @@ struct boss_bjarngrim : public npc_escortAI
             return;
         }
 
-        // Return since we have no target
+        // Return since we have no target. Do not Reset() here: an evade already calls Reset() through
+        // EnterEvadeMode, while a combat tick without a victim (a lieutenant engaged first) would
+        // despawn and re-summon both lieutenants every update and loop forever.
         if (!UpdateVictim())
-        {
-            Reset();
             return;
-        }
 
         if (me->HasUnitState(UNIT_STATE_CASTING))
             return;
