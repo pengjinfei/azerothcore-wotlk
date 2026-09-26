@@ -454,6 +454,9 @@ public:
                     if (Creature* reflection = instance->GetCreature(_spiritualReflectionGUID[i]))
                         if (reflection->IsVisible())
                         {
+                            // Both templates (37068/37721) carry UNIT_FLAG_IMMUNE_TO_PC: without clearing it the
+                            // reflections enter combat but can neither pick a player victim nor be attacked.
+                            reflection->SetImmuneToPC(false);
                             reflection->SetInCombatWithZone();
                             reflection->SetCanFly(false);
                             reflection->SetDisableGravity(false);
