@@ -57,6 +57,7 @@ enum Misc
 
     // NPCS
     NPC_RITUAL_CHANNELER                    = 27281,
+    NPC_RITUAL_TARGET                       = 27327, // Ritual Strike (48331) needs it as spell target (conditions)
     NPC_ARTHAS                              = 29280,
     NPC_FLAME_BRAZIER                       = 27273,
 };
@@ -363,13 +364,17 @@ public:
 
                         me->GetMotionMaster()->MoveIdle();
                         DoTeleportPlayer(target, 296.632f, -346.075f, 90.63f, 4.6f);
+                        // Ritual Strike lands on the altar through this trigger; without it the strike had no
+                        // target and hit whoever stood below Svala instead of the sacrificed player.
+                        me->SummonCreature(NPC_RITUAL_TARGET, 296.632f, -346.075f, 90.63f, 4.6f,
+                            TEMPSUMMON_TIMED_DESPAWN, 27000);
                         me->NearTeleportTo(296.632f, -346.075f, 110.0f, 4.6f, false);
                         me->SetControlled(true, UNIT_STATE_ROOT);
                         me->SetDisableGravity(true);
                     }
 
                     events.DelayEvents(25001ms); // +1 just to be sure
-                    events.ScheduleEvent(EVENT_SORROWGRAVE_RITUAL_SPELLS, 0ms);
+                    events.ScheduleEvent(EVENT_SORROWGRAVE_RITUAL_SPELLS, 3s);
                     events.ScheduleEvent(EVENT_SORROWGRAVE_FINISH_RITUAL, 25s);
                     return;
                 case EVENT_SORROWGRAVE_RITUAL_SPELLS:
