@@ -321,15 +321,17 @@ class spell_garfrost_permafrost : public SpellScript
                 for (std::list<WorldObject*>::iterator itrU = targets.begin(); itrU != targets.end(); ++itrU)
                     if (WorldObject* target = (*itrU))
                     {
+                        // Permafrost is a normal area spell and needs line of sight from Garfrost; a Saronite Rock
+                        // blocks it for anyone behind it, in melee range or not. The rock test stands in for its
+                        // collision model.
                         bool valid = true;
-                        if (!caster->IsWithinMeleeRange(target->ToUnit()))
-                            for (std::list<GameObject*>::const_iterator itr = blockList.begin(); itr != blockList.end(); ++itr)
-                                if (!(*itr)->IsInvisibleDueToDespawn())
-                                    if ((*itr)->IsInBetween(caster, target, 4.0f))
-                                    {
-                                        valid = false;
-                                        break;
-                                    }
+                        for (std::list<GameObject*>::const_iterator itr = blockList.begin(); itr != blockList.end(); ++itr)
+                            if (!(*itr)->IsInvisibleDueToDespawn())
+                                if ((*itr)->IsInBetween(caster, target, 4.0f))
+                                {
+                                    valid = false;
+                                    break;
+                                }
                         if (valid)
                         {
                             if (Aura* aur = target->ToUnit()->GetAura(70336))
