@@ -198,16 +198,18 @@ public:
                 return;
 
             if (Creature* dweller = unit->ToCreature())
-                if (CreatureGroup* formation = dweller->GetFormation())
+                if (dweller->GetFormation())
                 {
+                    // By guid: the dweller can be despawned within the second, and its formation freed with it.
+                    ObjectGuid const dwellerGuid = dweller->GetGUID();
                     scheduler.CancelAll();
-                    scheduler.Schedule(1s, [this, dweller, formation](TaskContext /*context*/)
+                    scheduler.Schedule(1s, [this, dwellerGuid](TaskContext /*context*/)
                     {
-                        if (!formation->IsAnyMemberAlive())
+                        Creature* dweller = instance->GetCreature(dwellerGuid);
+                        CreatureGroup* formation = dweller ? dweller->GetFormation() : nullptr;
+                        if (formation && !formation->IsAnyMemberAlive())
                         {
-                            if (dweller)
-                                dweller->AI()->Talk(EMOTE_SUMMON_ECK);
-
+                            dweller->AI()->Talk(EMOTE_SUMMON_ECK);
                             instance->SummonCreature(NPC_ECK_THE_FEROCIOUS, { 1624.70f, 891.43f, 95.08f, 1.2f });
                         }
                     });
