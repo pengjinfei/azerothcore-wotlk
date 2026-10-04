@@ -36,6 +36,7 @@ namespace
 {
     constexpr float BLADE_EDGE_ROPE_SNAP_DIST = 1.5f;
     constexpr float BLADE_EDGE_ROPE_SNAP_DIST2 = BLADE_EDGE_ROPE_SNAP_DIST * BLADE_EDGE_ROPE_SNAP_DIST;
+    constexpr float MAX_NORMALIZE_DROP = 10.0f;
 
     struct BladeEdgeArenaRope
     {
@@ -848,7 +849,13 @@ void PathGenerator::NormalizePath()
         if (snapBladeEdgeArenaRopes && TrySnapToBladeEdgeArenaRope(point))
             continue;
 
+        // Where the collision data has no floor the ground height falls through to the terrain far below the
+        // navmesh: a point of a stairway path put at z 0 walked the unit off the stairs and through the map
+        // (Gundrak, 1824,626 on the entrance spiral). The navmesh height stands there.
+        float const navZ = point.z;
         _source->UpdateAllowedPositionZ(point.x, point.y, point.z);
+        if (point.z < navZ - MAX_NORMALIZE_DROP)
+            point.z = navZ;
     }
 }
 
