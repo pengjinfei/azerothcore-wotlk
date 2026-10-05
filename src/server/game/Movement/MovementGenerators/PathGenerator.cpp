@@ -36,7 +36,7 @@ namespace
 {
     constexpr float BLADE_EDGE_ROPE_SNAP_DIST = 1.5f;
     constexpr float BLADE_EDGE_ROPE_SNAP_DIST2 = BLADE_EDGE_ROPE_SNAP_DIST * BLADE_EDGE_ROPE_SNAP_DIST;
-    constexpr float MAX_NORMALIZE_DROP = 10.0f;
+    constexpr float MAX_NORMALIZE_DROP = 4.0f;
 
     struct BladeEdgeArenaRope
     {
@@ -851,7 +851,8 @@ void PathGenerator::NormalizePath()
 
         // Where the collision data has no floor the ground height falls through to the terrain far below the
         // navmesh: a point of a stairway path put at z 0 walked the unit off the stairs and through the map
-        // (Gundrak, 1824,626 on the entrance spiral). The navmesh height stands there.
+        // (Gundrak, 1824,626 on the entrance spiral). The navmesh height stands there. Nor only to z 0: down the
+        // ramp from Moorabi's hall the terrain lies 8-9 yd under the floor and paths sank units into it (run 2179).
         float const navZ = point.z;
         _source->UpdateAllowedPositionZ(point.x, point.y, point.z);
         if (point.z < navZ - MAX_NORMALIZE_DROP)
