@@ -137,3 +137,7 @@ e2e/go.work.sum
 
 .cache
 compile_commands.json
+# Server runtime output at the repository root (the server is started from here)
+*.log
+raidtest-rosters/
+raidtest-scenes/
